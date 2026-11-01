@@ -68,11 +68,17 @@ class Gate:
         else:
             raise ValueError("CENetwork requires at least 2 modalities.")
 
-     def signal_network(self, current_data) -> None:
+     def signal_network(self, agent_response: dict[str, any]) -> None:
+        '''
+            The LLM has a system prompt that must determine on its own whether
+            to focus on its current response, by outputting a schematic response
+            {"output": text, "focus": bool}
+        '''
 
-          for state, data in enumerate(current_data):
-               if (state == "Focus"):
-                    self.attention_list.append(data)
+        if (agent_response["focus"] == False):
+            self.divert_attention(agent_response["output"])
+        
+        self.push_attention(agent_response["output"])
 
      async def push_attention(self, attention_list: list, task_count: int):
         for attention in attention_list:
