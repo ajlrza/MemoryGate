@@ -80,31 +80,22 @@ class Gate:
         
         self.push_attention(agent_response["output"])
 
-     async def push_attention(self, attention_list: list, task_count: int):
-        for attention in attention_list:
+     async def push_attention(self, attention: str):
+        for attention in attention:
             self.attention_list.append(attention)
         # For networks to know
         return self.attention.working_memory
                     
-     def divert_attention(self, check_attention: bool):
+     def divert_attention(self, attention: str):
 
-          attention_count = 0
           task_count = 0
-          
-          for attention in self.attention_list:
-               
-               attention_count += 1
-               self.current_attention[attention_count] = attention
                
           while (True):
 
                if (self.attention.working_memory() < 100):
                   self.attention.add_memory(self.attention_list[task_count - 1])
 
-               elif (check_attention == False):
-                   continue
                else:
-               # Note: Attention is the data from user, should SLM be involved here hm
                
                   if (len(self.attention.working_memory.keys()) != 100): 
                      self.attention.add_memory(self.attention_list[task_count])
