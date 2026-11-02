@@ -1,0 +1,32 @@
+[build-system]
+requires = ["hatchling >= 1.26"]
+build-backend = "hatchling.build"
+
+[project]
+name = "MemoryGate"
+version = "1.0.0"
+requires-python = ">= 3.8"
+dependencies = [
+    "numpy",
+]
+authors = [
+  {name = "Anjelo Laroza", email = "larozaanjelo@gmail.com"},
+]
+maintainers = [
+  {name = "Anjelo Laroza", email = "larozaanjelo@gmail.com"}
+]
+description = "A lightweight memory layer for roleplay chat agents for realism."
+readme = "README.md"
+license = {text = "MIT"}
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Intended Audience :: Commercial/Personal",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Text Processing :: Linguistic",
+    "Topic :: Communications :: Chat",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["MemoryGate"]
