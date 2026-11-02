@@ -114,7 +114,7 @@ The following is the main module from the MemoryGate Package:
 ---
 
 ### `attention_check()`
-> Applies an exponential decay calculation ($e^{-\text{decay\_rate} \times \Delta t}$) to a vector state based on elapsed time to pull extreme states back toward neutral (0).
+> Applies an exponential decay calculation ($e^{-\text{decay rate} \times \Delta t}$) to a vector state based on elapsed time to pull extreme states back toward neutral (0).
 
 #### Function Parameters
 
