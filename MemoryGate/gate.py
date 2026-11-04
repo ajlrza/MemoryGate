@@ -9,14 +9,41 @@ class AttentionSpace:
     __slots__ = ['working_memory', 'memory_space']
 
     def __init__(self):
-        self.working_memory = {}
+        self.working_memory: list[dict[str, any]] = []
+        self.stored_memory: dict[str, str] = {}
         self.memory_space = np.zeros((1000, 128))
         
-    def compute_attention(self, attention_embedding: float):
-        pass
-        # soon, basically we just use the np ndarray as vector space
+    def compute_attention(self, attention_embeddings: list[float]):
+
+        x_max = sorted(float(k) for k in self.working_memory[0].keys())
+        y_max = sorted(float(k) for k in self.working_memory[1].keys())
+
+        # d = √((Xᴺ - X_max)² + (Yᴺ - Y_max)²)
+        distance = ((attention_embeddings[0] - x_max[-1]) ** 2 + (attention_embeddings[1] - y_max[-1]) ** 2)
+        attended_memories = []
+        if (distance > 1):
+
+            for i in range(distance):
+                x_val = x_max[-1] - i
+                y_val = y_max[-1] - i
+
+                x = self.working_memory[0][x_val]
+                y = self.working_memory[1][y_val]
+
+                attended_memories.append(self.stored_memory[f"({x,y})"])
+            
+            return attended_memories
+
+        x_val = x_max[-1] - distance
+        y_val = y_max[-1] - distance
+
+        x = self.working_memory[0][x_val]
+        y = self.working_memory[1][y_val]
+
+        return self.stored_memory[f"({x,y})"]
         
     def add_memory(self, attention, attention_embedding: float):
+        # need an algo soon, or maybe just ask LLM to give the x and y coordinate
         self.working_memory[f'{attention_embedding}'] = attention
 
 class Gate:
@@ -25,6 +52,8 @@ class Gate:
      attention_list: list[float]
      attention_count: int
      current_attention = dict[str, any]
+
+
      schema = {
         "type": "object",
         "properties": {
@@ -34,12 +63,17 @@ class Gate:
             },
             "attention": {
                 "type": "bool",
-                "description": "Attention focus on the output based on LLM thinking"
+                "description": "Attention focus on the output based on LLM thinking & returned working memory"
             },
-            "coordinate": {
+            "x_coordinate": {
                 "type": "float",
-                "description": "Embedding coordinate placement based on LLM thinking"
-            }
+                "description": "Relevance X coordinate placement based on LLM thinking & returned working memory"
+            },
+            # Y value is the context impact based on the relevance of the attended memory.
+            "y_coordinate": {
+                "type": "float",
+                "description": "Context Impact Y coordinate placement based on LLM thinking & returned working memory"
+            },
         }
      }
 
@@ -82,10 +116,15 @@ class Gate:
                     "type": "bool",
                     "description": "Attention focus on the output based on LLM thinking"
                 },
-                "coordinate": {
+                "x_coordinate": {
                     "type": "float",
-                    "description": "Embedding coordinate placement based on LLM thinking & current attention space"
-                }}
+                    "description": "Embedding X coordinate placement based on LLM thinking & returned working memory"
+                },
+                "y_coordinate": {
+                    "type": "float",
+                    "description": "Embedding Y coordinate placement based on LLM thinking & returned working memory"
+                },
+            }
 
      async def push_attention(self, attention: str, distance: float) -> None:
 
