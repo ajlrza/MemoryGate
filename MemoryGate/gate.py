@@ -10,10 +10,9 @@ class AttentionSpace:
 
     def __init__(self):
         self.working_memory: list[dict[str, any]] = []
-        self.stored_memory: dict[str, str] = {}
         self.memory_space = np.zeros((1000, 128))
         
-    def compute_attention(self, attention_embeddings: list[float]):
+    def compute_attention(self, attention_embeddings: tuple[float]) -> str:
 
         x_max = sorted(float(k) for k in self.working_memory[0].keys())
         y_max = sorted(float(k) for k in self.working_memory[1].keys())
@@ -30,7 +29,7 @@ class AttentionSpace:
                 x = self.working_memory[0][x_val]
                 y = self.working_memory[1][y_val]
 
-                attended_memories.append(self.stored_memory[f"({x,y})"])
+                attended_memories.append(f"({x,y})")
             
             return attended_memories
 
@@ -40,11 +39,18 @@ class AttentionSpace:
         x = self.working_memory[0][x_val]
         y = self.working_memory[1][y_val]
 
-        return self.stored_memory[f"({x,y})"]
+        return f"({x,y})"
         
-    def add_memory(self, attention, attention_embedding: float):
+    def add_memory(self, attention, attention_embeddings: tuple[float]) -> None:
         # need an algo soon, or maybe just ask LLM to give the x and y coordinate
-        self.working_memory[f'{attention_embedding}'] = attention
+        xy: str | list[str] = self.compute_attention(attention_embeddings)
+
+        # { "(2,7)": ("(2,5)" "I washed away the remaining plates.")}
+        if (isinstance(xy, str)):
+            self.working_memory[f"({attention_embeddings[0], attention_embeddings[1]})"] = {xy, attention}
+        # { "(2,7)": (["(2,5)", "(4,7)", "(3,5)"], "I washed away the remaining plates.")}
+        elif isinstance(xy, list[str]):
+            self.working_memory[f"({attention_embeddings[0], attention_embeddings[1]})"] = (xy, attention)
 
 class Gate:
 
@@ -52,7 +58,6 @@ class Gate:
      attention_list: list[float]
      attention_count: int
      current_attention = dict[str, any]
-
 
      schema = {
         "type": "object",
@@ -65,12 +70,12 @@ class Gate:
                 "type": "bool",
                 "description": "Attention focus on the output based on LLM thinking & returned working memory"
             },
-            "x_coordinate": {
+            "x": {
                 "type": "float",
                 "description": "Relevance X coordinate placement based on LLM thinking & returned working memory"
             },
             # Y value is the context impact based on the relevance of the attended memory.
-            "y_coordinate": {
+            "y": {
                 "type": "float",
                 "description": "Context Impact Y coordinate placement based on LLM thinking & returned working memory"
             },
@@ -88,13 +93,13 @@ class Gate:
 
      def attach(self) -> dict[str, str]:
 
+        self.time = time.time()
         return self.attention.working_memory
 
      def process(self, agent_response: dict[str, any]) -> None:
         '''
             The LLM has a system prompt that must determine on its own whether
             to focus on its current response, by outputting a schematic response
-            {"output": text, "attention": bool, "coordinate": float}
         '''
 
         if (agent_response["attention"] == False):
@@ -102,9 +107,7 @@ class Gate:
             distance = agent_response["coordinate"]
             self.divert_attention(agent_response["output"], embedding * distance)
         
-        embedding = 1
-        distance = agent_response["coordinate"]
-        self.push_attention(agent_response["output"], embedding * distance)
+        self.push_attention(agent_response["output"], (agent_response["x"], agent_response["y"]))
 
      def raw_schema(self) -> dict[str, dict[str, str]]: 
 
@@ -126,15 +129,15 @@ class Gate:
                 },
             }
 
-     async def push_attention(self, attention: str, distance: float) -> None:
+     async def push_attention(self, attention: str, xy: tuple[float]) -> None:
 
         '''
             Pushing to the attention space is what makes the LLM agent remember what to remember on,
             and rely on for context during roleplays.
         '''
 
-        self.attention_list.append(attention)
-        self.attention.add_memory(attention, distance)
+        attention_remembrance = self.attention_check(self.time)
+        self.attention.add_memory(attention, xy)
                     
      def divert_attention(self, attention: str, distance: float) -> None:
 
@@ -148,8 +151,7 @@ class Gate:
 
      def attention_check(self, saved_state_vector: np.ndarray, last_timestamp: time.struct_time, decay_rate: float) -> typing.Any | np.ndarray:
             """
-            Applies exponential decay to the emotional vector based on elapsed time.
-            Brings extreme emotions back toward 0 (Neutral).
+            Applies exponential decay to the working memory based on elapsed time.
             """
             current_time = time.time()
             time_delta_seconds = current_time - last_timestamp
