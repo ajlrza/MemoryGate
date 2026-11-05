@@ -36,21 +36,37 @@ class AttentionSpace:
         x_val = x_max[-1] - distance
         y_val = y_max[-1] - distance
 
-        x = self.working_memory[0][x_val]
-        y = self.working_memory[1][y_val]
+        return f"({self.working_memory[0][x_val], self.working_memory[1][y_val]})"
 
-        return f"({x,y})"
-        
-    def add_memory(self, attention, attention_embeddings: tuple[float]) -> None:
+    def add_memory(self, attention, attn_embeds: tuple[float]) -> None | bool:
         # need an algo soon, or maybe just ask LLM to give the x and y coordinate
-        xy: str | list[str] = self.compute_attention(attention_embeddings)
+        xy: str | list[str] = self.compute_attention(attn_embeds)
+
+        if (not (isinstance(xy, str)) or not isinstance(xy, list[str])):
+            return False
 
         # { "(2,7)": ("(2,5)" "I washed away the remaining plates.")}
-        if (isinstance(xy, str)):
-            self.working_memory[f"({attention_embeddings[0], attention_embeddings[1]})"] = {xy, attention}
         # { "(2,7)": (["(2,5)", "(4,7)", "(3,5)"], "I washed away the remaining plates.")}
-        elif isinstance(xy, list[str]):
-            self.working_memory[f"({attention_embeddings[0], attention_embeddings[1]})"] = (xy, attention)
+
+        self.working_memory[0][attn_embeds[0]] = attention
+        self.working_memory[1][attn_embeds[1]] = attention
+        self.working_memory[2][f"({attn_embeds[0], attn_embeds[1]})"] = {xy, attention}
+
+    def dilute_memory(self, attention, old_attn_embeds: tuple[float], new_attn_embeds: tuple[float]) -> None | bool:
+
+        if (old_attn_embeds[0] not in self.working_memory[0].keys() and old_attn_embeds[1] not in self.working_memory[1].keys()):
+            return False
+
+        del self.working_memory[0][old_attn_embeds[0]]
+        del self.working_memory[1][old_attn_embeds[1]]
+        del self.working_memory[2][f"({old_attn_embeds[0], old_attn_embeds[1]})"]
+
+        self.working_memory[0][new_attn_embeds[0]] = attention
+        self.working_memory[1][new_attn_embeds[1]] = attention
+
+        xy: str | list[str] = self.compute_attention(new_attn_embeds)
+
+        self.working_memory[2][f"({new_attn_embeds[0], new_attn_embeds[1]})"] = (xy, attention)
 
 class Gate:
 
@@ -139,14 +155,17 @@ class Gate:
         attention_remembrance = self.attention_check(self.time)
         self.attention.add_memory(attention, xy)
                     
-     def divert_attention(self, attention: str, distance: float) -> None:
+     def divert_attention(self, attention: str, curr_xy: tuple[float], xy: tuple[float]) -> None:
 
         '''
             Diverting attention means to get rid of the current context in the roleplay session, and focus on newer attentions,
             unless the LLM does not decide so.
         '''
 
-        new_attention_distance = self.attention.compute_attention(distance)
+        mem = self.working_memory[curr_xy]
+
+        displacement = (mem[0] - xy[0], mem[1] - xy[1])
+        new_attention_distance = self.attention.compute_attention(displacement)
         self.push_attention(attention, new_attention_distance)
 
      def attention_check(self, saved_state_vector: np.ndarray, last_timestamp: time.struct_time, decay_rate: float) -> typing.Any | np.ndarray:
