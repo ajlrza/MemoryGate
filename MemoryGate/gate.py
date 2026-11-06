@@ -12,22 +12,29 @@ class AttentionSpace:
         self.working_memory: list[dict[str, any]] = []
         self.memory_space = np.zeros((1000, 128))
         
-    def compute_attention(self, attention_embeddings: tuple[float]) -> str:
+    def compute_attention(self, attention_coords: tuple[float]) -> str:
 
         x_max = sorted(float(k) for k in self.working_memory[0].keys())
         y_max = sorted(float(k) for k in self.working_memory[1].keys())
 
-        # d = √((Xᴺ - X_max)² + (Yᴺ - Y_max)²)
-        distance = ((attention_embeddings[0] - x_max[-1]) ** 2 + (attention_embeddings[1] - y_max[-1]) ** 2)
+        dot = None # soon
+        similarity = None # soon
+
+        distance = ((attention_coords[0] - x_max[-1]) ** 2) + ((attention_coords[1] - y_max[-1]) ** 2)
         attended_memories = []
+
         if (distance > 1):
 
-            for i in range(distance):
+            for i in range(int(distance)):
                 x_val = x_max[-1] - i
                 y_val = y_max[-1] - i
 
                 x = self.working_memory[0][x_val]
                 y = self.working_memory[1][y_val]
+
+                # For the current context, this coordinate stores a memory
+                # The nearer it is to the current context, the higher its relevance
+                self.memory_space[x_val, y_val] = 1
 
                 attended_memories.append(f"({x,y})")
             
@@ -36,11 +43,15 @@ class AttentionSpace:
         x_val = x_max[-1] - distance
         y_val = y_max[-1] - distance
 
+        # For the current context, this coordinate stores a memory
+        # The nearer it is to the current context, the higher its relevance
+        self.memory_space[x_val, y_val] = 1
+
         return f"({self.working_memory[0][x_val], self.working_memory[1][y_val]})"
 
-    def add_memory(self, attention, attn_embeds: tuple[float]) -> None | bool:
+    def add_memory(self, attention, attn_coords: tuple[float]) -> None | bool:
         # need an algo soon, or maybe just ask LLM to give the x and y coordinate
-        xy: str | list[str] = self.compute_attention(attn_embeds)
+        xy: str | list[str] = self.compute_attention(attn_coords)
 
         if (not (isinstance(xy, str)) or not isinstance(xy, list[str])):
             return False
@@ -48,9 +59,9 @@ class AttentionSpace:
         # { "(2,7)": ("(2,5)" "I washed away the remaining plates.")}
         # { "(2,7)": (["(2,5)", "(4,7)", "(3,5)"], "I washed away the remaining plates.")}
 
-        self.working_memory[0][attn_embeds[0]] = attention
-        self.working_memory[1][attn_embeds[1]] = attention
-        self.working_memory[2][f"({attn_embeds[0], attn_embeds[1]})"] = {xy, attention}
+        self.working_memory[0][attn_coords[0]] = attention
+        self.working_memory[1][attn_coords[1]] = attention
+        self.working_memory[2][f"({attn_coords[0], attn_coords[1]})"] = {xy, attention}
 
     def dilute_memory(self, attention, old_attn_embeds: tuple[float], new_attn_embeds: tuple[float]) -> None | bool:
 
@@ -68,12 +79,18 @@ class AttentionSpace:
 
         self.working_memory[2][f"({new_attn_embeds[0], new_attn_embeds[1]})"] = (xy, attention)
 
+    def new_short_term_memory(self, attention, attn_embeds: tuple[float]) -> None | bool:
+
+        # check if any attention embeddings are at most 5 coordinates away, we could keep them.
+        # 5 - not too relevant, still a little bit of context and relevance
+
 class Gate:
 
      attention: AttentionSpace
      attention_list: list[float]
+
      attention_count: int
-     current_attention = dict[str, any]
+     current_attention: dict[str, any]
 
      schema = {
         "type": "object",
@@ -98,7 +115,7 @@ class Gate:
         }
      }
 
-     __slots__ = ['attention', 'attention_list', 'current_attention', 'attention_count']
+     __slots__ = ['attention', 'attention_list', 'current_attention', 'attention_count', 'schema']
      
      def __init__(self):
         
@@ -119,9 +136,7 @@ class Gate:
         '''
 
         if (agent_response["attention"] == False):
-            embedding = -1
-            distance = agent_response["coordinate"]
-            self.divert_attention(agent_response["output"], embedding * distance)
+            self.divert_attention(agent_response["output"], (agent_response["x"], agent_response["y"]))
         
         self.push_attention(agent_response["output"], (agent_response["x"], agent_response["y"]))
 
@@ -145,7 +160,7 @@ class Gate:
                 },
             }
 
-     async def push_attention(self, attention: str, xy: tuple[float]) -> None:
+     def push_attention(self, attention: str, xy: tuple[float]) -> None:
 
         '''
             Pushing to the attention space is what makes the LLM agent remember what to remember on,
@@ -155,7 +170,7 @@ class Gate:
         attention_remembrance = self.attention_check(self.time)
         self.attention.add_memory(attention, xy)
                     
-     def divert_attention(self, attention: str, curr_xy: tuple[float], xy: tuple[float]) -> None:
+     def divert_attention(self, attention: str, xy: tuple[float]) -> None:
 
         '''
             Diverting attention means to get rid of the current context in the roleplay session, and focus on newer attentions,
