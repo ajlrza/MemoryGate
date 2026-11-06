@@ -83,6 +83,7 @@ class AttentionSpace:
 
         # check if any attention embeddings are at most 5 coordinates away, we could keep them.
         # 5 - not too relevant, still a little bit of context and relevance
+        pass
 
 class Gate:
 
@@ -124,10 +125,14 @@ class Gate:
         self.current_attention = {}
         self.attention_count = len(self.attention_list)
 
-     def attach(self) -> dict[str, str]:
+     def attach(self, deep_memory: bool = False) -> dict[str, str]:
 
         self.time = time.time()
-        return self.attention.working_memory
+
+        if (deep_memory):
+            return self.attention.working_memory
+
+        return self.attention.working_memory[-1]
 
      def process(self, agent_response: dict[str, any]) -> None:
         '''
