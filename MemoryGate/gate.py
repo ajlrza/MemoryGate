@@ -3,24 +3,28 @@ import numpy as np
 
 class AttentionSpace:
 
-    working_memory: dict[str, str]
+    working_memory: dict[str, any]
     memory_space: np.ndarray
 
     __slots__ = ['working_memory', 'memory_space']
 
     def __init__(self):
-        self.working_memory: list[dict[str, any]] = []
+        self.working_memory: dict[str, any] = {}
         self.memory_space = np.zeros((1000, 128))
         
+
+    # instead of tuple, maybe ill just use "xy" -> "12" then use the static position of 0 and 1 f6r xy... so i can avoid
+    # compute heavy shit, also i decided to stop using a list of dict, cuz its gonna make it harder to structure and organize thedata right
     def compute_attention(self, attention_coords: tuple[float]) -> str:
 
-        x_max = sorted(float(k) for k in self.working_memory[0].keys())
-        y_max = sorted(float(k) for k in self.working_memory[1].keys())
+        sorted_mem = sorted(float(k) for k in self.working_memory.keys())
 
         dot = None # soon
         similarity = None # soon
 
-        distance = ((attention_coords[0] - x_max[-1]) ** 2) + ((attention_coords[1] - y_max[-1]) ** 2)
+        # sorted_mem[-1] is the max
+
+        distance = ((attention_coords[0] - sorted_mem[-1][0]) ** 2) + ((attention_coords[1] - sorted_mem[-1][1]) ** 2)
         attended_memories = []
 
         if (distance > 1):
@@ -29,12 +33,12 @@ class AttentionSpace:
                 x_val = x_max[-1] - i
                 y_val = y_max[-1] - i
 
-                x = self.working_memory[0][x_val]
-                y = self.working_memory[1][y_val]
+                #x = self.working_memory[0][x_val]
+                #y = self.working_memory[1][y_val]
 
                 # For the current context, this coordinate stores a memory
                 # The nearer it is to the current context, the higher its relevance
-                self.memory_space[x_val, y_val] = 1
+                #self.memory_space[x_val, y_val] = 1
 
                 attended_memories.append(f"({x,y})")
             
@@ -116,7 +120,7 @@ class Gate:
         }
      }
 
-     __slots__ = ['attention', 'attention_list', 'current_attention', 'attention_count', 'schema']
+     __slots__ = ['attention', 'attention_list', 'current_attention', 'attention_count', 'time']
      
      def __init__(self):
         
@@ -141,9 +145,9 @@ class Gate:
         '''
 
         if (agent_response["attention"] == False):
-            self.divert_attention(agent_response["output"], (agent_response["x"], agent_response["y"]))
+            self.divert_attention(agent_response["output"], f"{agent_response["x"],agent_response["y"]}")
         
-        self.push_attention(agent_response["output"], (agent_response["x"], agent_response["y"]))
+        self.push_attention(agent_response["output"], f"{agent_response["x"],agent_response["y"]}")
 
      def raw_schema(self) -> dict[str, dict[str, str]]: 
 
@@ -165,7 +169,7 @@ class Gate:
                 },
             }
 
-     def push_attention(self, attention: str, xy: tuple[float]) -> None:
+     def push_attention(self, attention: str, xy: str) -> None:
 
         '''
             Pushing to the attention space is what makes the LLM agent remember what to remember on,
@@ -175,7 +179,7 @@ class Gate:
         attention_remembrance = self.attention_check(self.time)
         self.attention.add_memory(attention, xy)
                     
-     def divert_attention(self, attention: str, xy: tuple[float]) -> None:
+     def divert_attention(self, attention: str, xy: str) -> None:
 
         '''
             Diverting attention means to get rid of the current context in the roleplay session, and focus on newer attentions,
@@ -184,7 +188,7 @@ class Gate:
 
         mem = self.working_memory[curr_xy]
 
-        displacement = (mem[0] - xy[0], mem[1] - xy[1])
+        displacement = (mem[0] - int(xy[0]), mem[1] - int(xy[2]))
         new_attention_distance = self.attention.compute_attention(displacement)
         self.push_attention(attention, new_attention_distance)
 
