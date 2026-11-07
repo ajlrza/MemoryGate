@@ -11,11 +11,10 @@ class AttentionSpace:
     def __init__(self):
         self.working_memory: dict[str, any] = {}
         self.memory_space = np.zeros((1000, 128))
-        
 
     # instead of tuple, maybe ill just use "xy" -> "12" then use the static position of 0 and 1 f6r xy... so i can avoid
     # compute heavy shit, also i decided to stop using a list of dict, cuz its gonna make it harder to structure and organize thedata right
-    def compute_attention(self, attention_coords: tuple[float]) -> str:
+    def compute_attention(self, attention_coords: str) -> str:
         sorted_mem = sorted(k.replace(",", " ") for k in self.working_memory.keys())
 
         dot = None # soon
@@ -33,7 +32,7 @@ class AttentionSpace:
         #return f"({self.working_memory[0][x_val], self.working_memory[1][y_val]})"
 
     def add_memory(self, attention: str, attn_coords: str) -> None | bool:
-        xy: str | list[str] = self.compute_attention(attn_coords)
+        xy: str = self.compute_attention(attn_coords)
 
         if (not (isinstance(xy, str)) or not isinstance(xy, list[str])):
             return False
@@ -48,15 +47,26 @@ class AttentionSpace:
         curr_attn_anchor = str(sorted[-1])
         del self.working_memory[curr_attn_anchor[:1]+ "," + curr_attn_anchor[1:]]
 
-        xy: str | list[str] = self.compute_attention(new_attn_embeds)
+        xy: str = self.compute_attention(new_attn_embeds)
 
         self.working_memory[xy] = xy, attention
 
-    def new_short_term_memory(self, attention, attn_embeds: tuple[float]) -> None | bool:
+    def new_short_term_memory(self, attention, attn_embeds: str) -> None:
 
         # check if any attention embeddings are at most 5 coordinates away, we could keep them.
         # 5 - not too relevant, still a little bit of context and relevance
-        pass
+        xy: str = self.compute_attention(attn_embeds)
+
+        match = (self.memory_space > int(xy[0])) & (self.memory_space > int(xy[2]))
+        matching_mems = self.memory_space[match]
+
+        matching_mems_embeds = np.where(match)[0].tolist() 
+
+        self.memory_space = np.zeros((1000, 128))
+        self.memory_space[0,0] = matching_mems
+
+        self.working_memory.clear()
+        self.working_memory[str(matching_mems_embeds[0],matching_mems_embeds[1])] = attention
 
 class Gate:
 
