@@ -1,9 +1,9 @@
-import os, sys, time, typing
+import os, sys, time, typing, math
 import numpy as np
 from dataclasses import dataclass
 
-@dataclass
-class coords(slots=True):
+@dataclass(slots=True)
+class coords():
     x: int
     y: int
 
@@ -18,24 +18,24 @@ class AttentionSpace:
         self.working_memory: dict[str, any] = {}
         self.memory_space = np.zeros((1000, 128))
 
-    # instead of tuple, maybe ill just use "xy" -> "12" then use the static position of 0 and 1 f6r xy... so i can avoid
-    # compute heavy shit, also i decided to stop using a list of dict, cuz its gonna make it harder to structure and organize thedata right
     def compute_attention(self, attention_coords: coords) -> str:
-        sorted_mem = sorted([k.replace(",", " ") for k in self.working_memory.keys()])
+        sorted_mem = sorted(int(k.replace(",", "")) for k in self.working_memory.keys())
+        curr_attn_anchor = sorted_mem[-1]
 
-        dot = None # soon
-        similarity = None # soon
+        dot = np.dot([attention_coords.x, attention_coords.y], [curr_attn_anchor[0], curr_attn_anchor[1]])
+        magnitude_a = math.sqrt((attention_coords.x ** 2 + attention_coords.y[0] ** 2))
+        magnitude_b = math.sqrt((curr_attn_anchor[0] ** 2 + curr_attn_anchor[1] ** 2))
+        similarity = dot / (magnitude_a * magnitude_b)
 
-        # sorted_mem[-1] is the max
+        distance = ((attention_coords.x - curr_attn_anchor[0])) + ((attention_coords.y - curr_attn_anchor[1]))
+        attention_equation = similarity * distance
 
-        upper_boundary = ((attention_coords.x - sorted_mem[-1][0]) ** 2) + ((attention_coords.y - sorted_mem[-1][2]) ** 2)
-        
-
-        # For the current context, this coordinate stores a memory
-        # The nearer it is to the current context, the higher its relevance
-        #self.memory_space[x_val, y_val] = 1
-
-        #return f"({self.working_memory[0][x_val], self.working_memory[1][y_val]})"
+        if (attention_equation == 0):
+            return attention_coords
+        elif (attention_equation > 1):
+            return f"{attention_coords.x - curr_attn_anchor[0]},{attention_coords.y - curr_attn_anchor[1]}"
+        elif (attention_equation < 1):
+            return f"{attention_coords.x - curr_attn_anchor[0] - distance},{attention_coords.y - curr_attn_anchor[1] - distance}"
 
     def add_memory(self, attention: str, attn_coords: coords) -> None | bool:
         xy: str = self.compute_attention(attn_coords)
@@ -52,6 +52,7 @@ class AttentionSpace:
 
         sorted_mem = sorted(int(k.replace(",", "")) for k in self.working_memory.keys())
         curr_attn_anchor = str(sorted_mem[-1])
+
         del self.working_memory[curr_attn_anchor[:1]+ "," + curr_attn_anchor[1:]]
 
         xy: str = self.compute_attention(new_attn_embeds)
@@ -73,7 +74,7 @@ class AttentionSpace:
         self.memory_space[0,0] = matching_mems
 
         self.working_memory.clear()
-        self.working_memory[str(matching_mems_embeds[0],matching_mems_embeds[1])] = attention
+        self.working_memory[f"{str(matching_mems_embeds[0])},{str(matching_mems_embeds[1])}"] = attention
 
 class Gate:
 
