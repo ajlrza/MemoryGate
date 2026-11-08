@@ -1,5 +1,11 @@
 import os, sys, time, typing
 import numpy as np
+from dataclasses import dataclass
+
+@dataclass
+class coords(slots=True):
+    x: int
+    y: int
 
 class AttentionSpace:
 
@@ -14,15 +20,15 @@ class AttentionSpace:
 
     # instead of tuple, maybe ill just use "xy" -> "12" then use the static position of 0 and 1 f6r xy... so i can avoid
     # compute heavy shit, also i decided to stop using a list of dict, cuz its gonna make it harder to structure and organize thedata right
-    def compute_attention(self, attention_coords: str) -> str:
-        sorted_mem = sorted(k.replace(",", " ") for k in self.working_memory.keys())
+    def compute_attention(self, attention_coords: coords) -> str:
+        sorted_mem = sorted([k.replace(",", " ") for k in self.working_memory.keys()])
 
         dot = None # soon
         similarity = None # soon
 
         # sorted_mem[-1] is the max
 
-        upper_boundary = ((attention_coords[0] - sorted_mem[-1][0]) ** 2) + ((attention_coords[1] - sorted_mem[-1][2]) ** 2)
+        upper_boundary = ((attention_coords.x - sorted_mem[-1][0]) ** 2) + ((attention_coords.y - sorted_mem[-1][2]) ** 2)
         
 
         # For the current context, this coordinate stores a memory
@@ -31,27 +37,28 @@ class AttentionSpace:
 
         #return f"({self.working_memory[0][x_val], self.working_memory[1][y_val]})"
 
-    def add_memory(self, attention: str, attn_coords: str) -> None | bool:
+    def add_memory(self, attention: str, attn_coords: coords) -> None | bool:
         xy: str = self.compute_attention(attn_coords)
 
-        if (not (isinstance(xy, str)) or not isinstance(xy, list[str])):
-            return False
+        if not (isinstance(xy, str)):
+           return False
 
         # { ROW attn_coords[0], COL attn_coords[2]:  "I washed away the remaining plates."}
 
-        self.working_memory[attn_coords[0], attn_coords[2]] = attention
+        self.memory_space[attn_coords.x, attn_coords.y] = attention
+        self.working_memory[f"{str(attn_coords.x)},{str(attn_coords.y)}"] = attention
 
-    def dilute_memory(self, attention, new_attn_embeds: tuple[float]) -> None | bool:
+    def dilute_memory(self, attention, new_attn_embeds: coords) -> None | bool:
 
         sorted_mem = sorted(int(k.replace(",", "")) for k in self.working_memory.keys())
-        curr_attn_anchor = str(sorted[-1])
+        curr_attn_anchor = str(sorted_mem[-1])
         del self.working_memory[curr_attn_anchor[:1]+ "," + curr_attn_anchor[1:]]
 
         xy: str = self.compute_attention(new_attn_embeds)
 
         self.working_memory[xy] = xy, attention
 
-    def new_short_term_memory(self, attention, attn_embeds: str) -> None:
+    def new_short_term_memory(self, attention, attn_embeds: coords) -> None:
 
         # check if any attention embeddings are at most 5 coordinates away, we could keep them.
         # 5 - not too relevant, still a little bit of context and relevance
@@ -99,13 +106,14 @@ class Gate:
         }
      }
 
-     __slots__ = ['attention', 'attention_list', 'current_attention', 'attention_count', 'time']
+     __slots__ = ['attention', 'attention_list', 'current_attention', 'attention_count', 'time', 'xy']
      
      def __init__(self):
         
         self.attention = AttentionSpace()
         self.attention_list = []
         self.current_attention = {}
+        self.xy = coords(x=0, y=0)
 
      def attach(self, deep_memory: bool = False) -> dict[str, str]:
 
@@ -114,7 +122,8 @@ class Gate:
         if (deep_memory):
             return self.attention.working_memory
 
-        return self.attention.working_memory[-1]
+        curr_attn = list(self.attention.working_memory.keys())[-1]
+        return self.attention.working_memory[curr_attn]
 
      def process(self, agent_response: dict[str, any]) -> None:
         '''
@@ -122,10 +131,13 @@ class Gate:
             to focus on its current response, by outputting a schematic response
         '''
 
+        self.xy.x = agent_response["x"]
+        self.xy.y = agent_response["y"]
+
         if (agent_response["attention"] == False):
-            self.push_attention(agent_response["output"], f"{agent_response["x"],agent_response["y"]}", True)
+            self.push_attention(agent_response["output"], self.xy, True)
         
-        self.push_attention(agent_response["output"], f"{agent_response["x"],agent_response["y"]}")
+        self.push_attention(agent_response["output"], self.xy)
 
      def raw_schema(self) -> dict[str, dict[str, str]]: 
 
@@ -147,7 +159,7 @@ class Gate:
                 },
             }
 
-     def push_attention(self, attention: str, xy: str, divert: bool = False) -> None:
+     def push_attention(self, attention: str, xy: coords, divert: bool = False) -> None:
 
         '''
             Pushing to the attention space is what makes the LLM agent remember what to remember on,
