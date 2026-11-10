@@ -16,26 +16,33 @@ class AttentionSpace:
 
     def __init__(self):
         self.working_memory: dict[str, any] = {}
-        self.memory_space = np.zeros((1000, 128))
+        self.memory_space = np.zeros((1000, 3))
 
     def compute_attention(self, attention_coords: coords) -> str:
-        sorted_mem = sorted(int(k.replace(",", "")) for k in self.working_memory.keys())
-        curr_attn_anchor = sorted_mem[-1]
 
-        dot = np.dot([attention_coords.x, attention_coords.y], [curr_attn_anchor[0], curr_attn_anchor[1]])
-        magnitude_a = math.sqrt((attention_coords.x ** 2 + attention_coords.y[0] ** 2))
-        magnitude_b = math.sqrt((curr_attn_anchor[0] ** 2 + curr_attn_anchor[1] ** 2))
-        similarity = dot / (magnitude_a * magnitude_b)
+        if (len(self.memory_space.shape[0] == 0)):
+            return "0,0"
 
-        distance = ((attention_coords.x - curr_attn_anchor[0])) + ((attention_coords.y - curr_attn_anchor[1]))
+        sorted_working_mem = sorted(int(k.replace(",", "")) for k in self.working_memory.keys())
+        curr_short_mem = sorted_working_mem[0]
+        curr_short_anchor = self.memory_space[0]
+
+        # We compute based on their X - context importance, and Y - context relevance, 
+        # so we assume context importance has a relationship with context relevance
+        dot = np.dot([attention_coords.x, attention_coords.y], [curr_short_mem[0], curr_short_mem[1]])
+        magnitude_importance = math.sqrt((attention_coords.x ** 2 + attention_coords.y[0] ** 2))
+        magnitude_relevance = math.sqrt((curr_short_mem[0] ** 2 + curr_short_mem[1] ** 2))
+        similarity = dot / (magnitude_importance * magnitude_relevance)
+
+        distance = ((attention_coords.x - curr_short_mem[0])) + ((attention_coords.y - curr_short_mem[1]))
         attention_equation = similarity * distance
 
         if (attention_equation == 0):
             return attention_coords
         elif (attention_equation > 1):
-            return f"{attention_coords.x - curr_attn_anchor[0]},{attention_coords.y - curr_attn_anchor[1]}"
+            return f"{attention_coords.x - curr_short_mem[0]},{attention_coords.y - curr_short_mem[1]}"
         elif (attention_equation < 1):
-            return f"{attention_coords.x - curr_attn_anchor[0] - distance},{attention_coords.y - curr_attn_anchor[1] - distance}"
+            return f"{attention_coords.x - curr_short_mem[0] - distance},{attention_coords.y - curr_short_mem[1] - distance}"
 
     def add_memory(self, attention: str, attn_coords: coords) -> None | bool:
         xy: str = self.compute_attention(attn_coords)
@@ -48,14 +55,7 @@ class AttentionSpace:
         self.memory_space[attn_coords.x, attn_coords.y] = attention
         self.working_memory[f"{str(attn_coords.x)},{str(attn_coords.y)}"] = attention
 
-    def dilute_memory(self, attention, new_attn_embeds: coords) -> None | bool:
-
-        sorted_mem = sorted(int(k.replace(",", "")) for k in self.working_memory.keys())
-        curr_attn_anchor = str(sorted_mem[-1])
-
-        del self.working_memory[curr_attn_anchor[:1]+ "," + curr_attn_anchor[1:]]
-
-        xy: str = self.compute_attention(new_attn_embeds)
+    def decay_current(self, decayed_attention_score: float) -> None | bool:
 
         self.working_memory[xy] = xy, attention
 
@@ -71,10 +71,17 @@ class AttentionSpace:
         matching_mems_embeds = np.where(match)[0].tolist() 
 
         self.memory_space = np.zeros((1000, 128))
-        self.memory_space[0,0] = matching_mems
+        self.memory_space[0,0] = [matching_mems, 100.0]
 
         self.working_memory.clear()
         self.working_memory[f"{str(matching_mems_embeds[0])},{str(matching_mems_embeds[1])}"] = attention
+
+    def get_curr_attn(self) -> list[np.ndarray, float]:
+
+        if len(self.working_memory.items() > 4):
+            return [self.memory_space[0], 15.0]
+
+        return [self.memory_space[0], 5.0]
 
 class Gate:
 
@@ -97,12 +104,11 @@ class Gate:
             },
             "x": {
                 "type": "float",
-                "description": "Relevance X coordinate placement based on LLM thinking & returned working memory"
+                "description": "Context importance - X coordinate placement based on LLM thinking & returned working memory"
             },
-            # Y value is the context impact based on the relevance of the attended memory.
             "y": {
                 "type": "float",
-                "description": "Context Impact Y coordinate placement based on LLM thinking & returned working memory"
+                "description": "Context relevance - Y coordinate placement based on LLM thinking & returned working memory"
             },
         }
      }
@@ -150,13 +156,13 @@ class Gate:
                     "type": "bool",
                     "description": "Attention focus on the output based on LLM thinking"
                 },
-                "x_coordinate": {
+                "x": {
                     "type": "float",
-                    "description": "Embedding X coordinate placement based on LLM thinking & returned working memory"
+                    "description": "Context importance - X coordinate placement based on LLM thinking & returned working memory"
                 },
-                "y_coordinate": {
+                "y": {
                     "type": "float",
-                    "description": "Embedding Y coordinate placement based on LLM thinking & returned working memory"
+                    "description": "Context relevance - Y coordinate placement based on LLM thinking & returned working memory"
                 },
             }
 
@@ -170,26 +176,26 @@ class Gate:
         if (divert):
             self.attention.dilute_memory(attention, xy)
 
-        attention_remembrance = self.attention_check(self.time)
+        curr_anchor = self.attention.get_curr_attn()
+
+        curr_attn_decay = self.attention_check(curr_anchor[0], self.time, curr_anchor[1]) 
         self.attention.add_memory(attention, xy)
     
 
-     def attention_check(self, saved_state_vector: np.ndarray, last_timestamp: time.struct_time, decay_rate: float) -> typing.Any | np.ndarray:
+     def attention_check(self, curr_attn_anchor: np.ndarray, last_timestamp: float, decay_rate: float) -> typing.Any | np.ndarray:
             """
             Applies exponential decay to the working memory based on elapsed time.
             """
             current_time = time.time()
             time_delta_seconds = current_time - last_timestamp
-            decay_factor = 0
+            decay_factor = 1 - decay_rate
     
             if (time_delta_seconds < current_time and decay_rate >= 1.0): 
                 return False
-    
-                #approaches 0
-            if (time_delta_seconds > current_time and decay_rate <= 0): 
+            elif (time_delta_seconds > current_time and decay_rate <= 0): 
                 decay_factor = np.exp(-decay_rate * time_delta_seconds)
     
-            decayed_state = saved_state_vector * decay_factor
+            decayed_state = curr_attn_anchor * decay_factor
             
             return decayed_state
 
