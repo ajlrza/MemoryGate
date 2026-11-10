@@ -1,4 +1,4 @@
-import os, sys, time, typing, math
+import time, typing, math
 import numpy as np
 from dataclasses import dataclass
 
@@ -32,6 +32,7 @@ class AttentionSpace:
         dot = np.dot([attention_coords.x, attention_coords.y], [curr_short_mem[0], curr_short_mem[1]])
         magnitude_importance = math.sqrt((attention_coords.x ** 2 + attention_coords.y[0] ** 2))
         magnitude_relevance = math.sqrt((curr_short_mem[0] ** 2 + curr_short_mem[1] ** 2))
+        similarity  = 0
         similarity = dot / (magnitude_importance * magnitude_relevance)
 
         distance = ((attention_coords.x - curr_short_mem[0])) + ((attention_coords.y - curr_short_mem[1]))
@@ -55,26 +56,41 @@ class AttentionSpace:
         self.memory_space[attn_coords.x, attn_coords.y] = attention
         self.working_memory[f"{str(attn_coords.x)},{str(attn_coords.y)}"] = attention
 
-    def decay_current(self, decayed_attention_score: float) -> None | bool:
+    def decay_current(self, decayed_attn_score: float) -> None | bool:
 
-        self.working_memory[xy] = xy, attention
+        if (self.working_memory[0, 2] < 40.0):
+            return False
 
-    def new_short_term_memory(self, attention, attn_embeds: coords) -> None:
+        self.working_memory[0, 2] = decayed_attn_score
+        return
+
+    def new_short_term_memory(self, attention) -> None:
 
         # check if any attention embeddings are at most 5 coordinates away, we could keep them.
         # 5 - not too relevant, still a little bit of context and relevance
-        xy: str = self.compute_attention(attn_embeds)
 
-        match = (self.memory_space > int(xy[0])) & (self.memory_space > int(xy[2]))
+        match = (self.memory_space[0, 0] > self.memory_space) & (self.memory_space[0, 1] > self.memory_space)
         matching_mems = self.memory_space[match]
 
-        matching_mems_embeds = np.where(match)[0].tolist() 
+        matching_mems_embeds = np.where(match)[0]
+        new_memory_space = np.zeros((1000, 3))
 
-        self.memory_space = np.zeros((1000, 128))
-        self.memory_space[0,0] = [matching_mems, 100.0]
+        new_memory_space[matching_mems_embeds] = self.memory_space[matching_mems_embeds]
 
+        self.memory_space = np.zeros((1000, 3))
+        self.memory_space = new_memory_space
+
+        self.memory_space[0,0] = 0
+        self.memory_space[0,1] = 0
+        self.memory_space[0,2] = 0.00
         self.working_memory.clear()
-        self.working_memory[f"{str(matching_mems_embeds[0])},{str(matching_mems_embeds[1])}"] = attention
+
+        #indices = np.array(matching_mems_embeds)
+        #N = len(indices)
+
+        #self.working_memory[f"{indices[:N-3]}, {}"] = indices[:N-3]  
+        #self.working_memory[f"{indices[:N-3]}, {}"] = indices[1:N-2]  
+        #self.working_memory[f"{indices[:N-3]}, {}"] = indices[2:N-1]  
 
     def get_curr_attn(self) -> list[np.ndarray, float]:
 
@@ -99,21 +115,21 @@ class Gate:
                 "description": "LLM Output"
             },
             "attention": {
-                "type": "bool",
-                "description": "Attention focus on the output based on LLM thinking & returned working memory"
-            },
+                "type": "boolean",
+                "description": "True or False only. Do not capitalize as True/False if outputting raw JSON. Focus on this output or not = context"
+            }, 
             "x": {
-                "type": "float",
-                "description": "Context importance - X coordinate placement based on LLM thinking & returned working memory"
+                "type": "number",
+                "description": "context importance coordinate. Must be a plain decimal number between 0.00 and 1.00 (e.g., 0.55). Do not use scientific notation, NaN, or text. X coordinate -> memoryspace"
             },
             "y": {
-                "type": "float",
-                "description": "Context relevance - Y coordinate placement based on LLM thinking & returned working memory"
+                "type": "number",
+                "description":  "context relevance coordinate. Must be a plain decimal number between 0.00 and 1.00 (e.g., 0.55). Do not use scientific notation, NaN, or text. Y coordinate -> memoryspace"
             },
         }
      }
 
-     __slots__ = ['attention', 'attention_list', 'current_attention', 'attention_count', 'time', 'xy']
+     __slots__ = ['attention', 'attention_list', 'current_attention', 'xy', 'time']
      
      def __init__(self):
         
@@ -125,6 +141,9 @@ class Gate:
      def attach(self, deep_memory: bool = False) -> dict[str, str]:
 
         self.time = time.time()
+
+        if (len(self.attention.working_memory == 0)):
+            return {"0,0": ""}
 
         if (deep_memory):
             return self.attention.working_memory
@@ -142,7 +161,7 @@ class Gate:
         self.xy.y = agent_response["y"]
 
         if (agent_response["attention"] == False):
-            self.push_attention(agent_response["output"], self.xy, True)
+            return
         
         self.push_attention(agent_response["output"], self.xy)
 
@@ -166,38 +185,33 @@ class Gate:
                 },
             }
 
-     def push_attention(self, attention: str, xy: coords, divert: bool = False) -> None:
+     def push_attention(self, attention: str, xy: coords) -> None:
 
         '''
             Pushing to the attention space is what makes the LLM agent remember what to remember on,
             and rely on for context during roleplays.
         '''
 
-        if (divert):
-            self.attention.dilute_memory(attention, xy)
-
         curr_anchor = self.attention.get_curr_attn()
 
-        curr_attn_decay = self.attention_check(curr_anchor[0], self.time, curr_anchor[1]) 
+        curr_attn_decay: float = self.attention_check(curr_anchor[0], self.time, curr_anchor[1])
+        self.attention.decay_current(curr_attn_decay)
         self.attention.add_memory(attention, xy)
     
 
-     def attention_check(self, curr_attn_anchor: np.ndarray, last_timestamp: float, decay_rate: float) -> typing.Any | np.ndarray:
+     def attention_check(self, curr_attn_decay: float, last_timestamp: float, decay_rate: float) -> typing.Any | float:
             """
             Applies exponential decay to the working memory based on elapsed time.
             """
             current_time = time.time()
             time_delta_seconds = current_time - last_timestamp
-            decay_factor = 1 - decay_rate
+            decay_factor = 0
     
             if (time_delta_seconds < current_time and decay_rate >= 1.0): 
                 return False
             elif (time_delta_seconds > current_time and decay_rate <= 0): 
-                decay_factor = np.exp(-decay_rate * time_delta_seconds)
+                decay_factor = np.exp(1 - decay_rate * time_delta_seconds)
     
-            decayed_state = curr_attn_anchor * decay_factor
+            decayed_curr_attn = curr_attn_decay * decay_factor
             
-            return decayed_state
-
-     def access_attention():
-        pass
+            return decayed_curr_attn
