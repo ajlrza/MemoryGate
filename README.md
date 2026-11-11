@@ -47,3 +47,15 @@ def roleplay(rp_msg):
     except Exception as e:
         print(f"An error occurred: {e}")
 ```
+
+
+# Architecture
+
+The "current attention" is the anchor for the short-term memory realism.
+It is always the first row for structural purposes and as the center in space.
+This method returns it as well as the decay rate associated per access.
+
+To mimic human attention span, it can only hold at most 4, so we 
+take that concept and apply it to the working memory dict item list.
+The working memory dict is in parallel with the memory space for the
+easier data access, while memory space serves as the geometric truth.
