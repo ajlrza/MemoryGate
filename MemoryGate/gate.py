@@ -3,63 +3,85 @@ import numpy as np
 from dataclasses import dataclass
 
 @dataclass(slots=True)
-class coords():
+class Coords(typing.NamedTuple):
     x: int
     y: int
 
-class AttentionSpace:
+@dataclass(slots=True)
+class DecayedAttn(typing.NamedTuple):
+    CurrAttnFocus: np.ndarray
+    DecayRate: typing.Literal[5,15]
 
-    working_memory: dict[str, any]
+@dataclass(slots=True)
+class WorkingMemAttn(typing.NamedTuple):
+    Attn: str
+    Score: float
+
+@dataclass(slots=True)
+class StoredWorkingMem(typing.NamedTuple):
+    Pos: Coords
+    Attn: WorkingMemAttn
+
+def AttentionMemAdder(mem_space: np.ndarray[1000, 4], attn_coords: Coords | list[int], attn: str) -> np.ndarray:
+
+    x = attn_coords.x if isinstance(attn_coords, Coords) else attn_coords[0] if isinstance(attn_coords, list) else None
+    y = attn_coords.y if isinstance(attn_coords, Coords) else attn_coords[1] if isinstance(attn_coords, list) else None
+
+    mem_space[x, y] = x
+    mem_space[x, y + 1] = y
+    mem_space[x, y + 2] = 100
+    mem_space[x, y + 2] = attn
+
+    return mem_space
+
+class AttentionSpace:
+    working_memory: dict[str, WorkingMemAttn]
     memory_space: np.ndarray
 
-    __slots__ = ['working_memory', 'memory_space']
+    __slots__ = ['working_memory', 'memory_space', 'decay']
 
     def __init__(self):
         self.working_memory: dict[str, any] = {}
-        self.memory_space = np.zeros((1000, 3))
+        dt = np.dtype([('context impt.', 'i4'), ('context relv.', 'i4'), ('score', 'f8'), ('attention', 'U10')])
+        self.memory_space = np.zeros(1000, dtype=dt)
+        self.decay = DecayedAttn(CurrAttn=None, DecayRate=5)
 
-    def compute_attention(self, attention_coords: coords) -> str:
+    def compute_attention(self, attention_coords: Coords) -> str:
 
-        if (len(self.memory_space.shape[0] == 0)):
+        if (len(self.memory_space.shape[0]) == 0):
             return "0,0"
 
-        sorted_working_mem = sorted(int(k.replace(",", "")) for k in self.working_memory.keys())
-        curr_short_mem = sorted_working_mem[0]
-        curr_short_anchor = self.memory_space[0]
+        curr_attn_anchor = self.memory_space[0]
 
         # We compute based on their X - context importance, and Y - context relevance, 
         # so we assume context importance has a relationship with context relevance
-        dot = np.dot([attention_coords.x, attention_coords.y], [curr_short_mem[0], curr_short_mem[1]])
-        magnitude_importance = math.sqrt((attention_coords.x ** 2 + attention_coords.y[0] ** 2))
-        magnitude_relevance = math.sqrt((curr_short_mem[0] ** 2 + curr_short_mem[1] ** 2))
-        similarity  = 0
+        dot = np.dot([attention_coords.x, attention_coords.y], [curr_attn_anchor[0], curr_attn_anchor[1]])
+        magnitude_importance = math.sqrt((attention_coords.x ** 2) + (attention_coords.y ** 2))
+        magnitude_relevance = math.sqrt((curr_attn_anchor[0] ** 2) + (curr_attn_anchor[1] ** 2))
         similarity = dot / (magnitude_importance * magnitude_relevance)
 
-        distance = ((attention_coords.x - curr_short_mem[0])) + ((attention_coords.y - curr_short_mem[1]))
+        distance = ((attention_coords.x - curr_attn_anchor[0])) + ((attention_coords.y - curr_attn_anchor[1]))
         attention_equation = similarity * distance
 
         if (attention_equation == 0):
             return attention_coords
         elif (attention_equation > 1):
-            return f"{attention_coords.x - curr_short_mem[0]},{attention_coords.y - curr_short_mem[1]}"
+            return f"{attention_coords.x - curr_attn_anchor[0]},{attention_coords.y - curr_attn_anchor[1]}"
         elif (attention_equation < 1):
-            return f"{attention_coords.x - curr_short_mem[0] - distance},{attention_coords.y - curr_short_mem[1] - distance}"
+            return f"{attention_coords.x - curr_attn_anchor[0] - distance},{attention_coords.y - curr_attn_anchor[1] - distance}"
 
-    def add_memory(self, attention: str, attn_coords: coords) -> None | bool:
+    def add_memory(self, attention: str, attn_coords: Coords) -> None | bool:
         xy: str = self.compute_attention(attn_coords)
 
         if not (isinstance(xy, str)):
            return False
 
-        # { ROW attn_coords[0], COL attn_coords[2]:  "I washed away the remaining plates."}
+        # { ROW attn_coords[0], COL attn_coords[2]:  "I washed away the remaining plates."
+        self.memory_space = AttentionMemAdder(self.memory_space, attn_coords, attention)
 
-        self.memory_space[attn_coords.x, attn_coords.y] = attention
         self.working_memory[f"{str(attn_coords.x)},{str(attn_coords.y)}"] = attention
 
-    def decay_current(self, decayed_attn_score: float) -> None | bool:
-
-        if (self.working_memory[0, 2] < 40.0):
-            return False
+    def decay_current(self, decayed_attn_score: float) -> None:
 
         self.working_memory[0, 2] = decayed_attn_score
         return
@@ -79,25 +101,27 @@ class AttentionSpace:
 
         self.memory_space = np.zeros((1000, 3))
         self.memory_space = new_memory_space
-
-        self.memory_space[0,0] = 0
-        self.memory_space[0,1] = 0
-        self.memory_space[0,2] = 0.00
+        self.memory_space = AttentionMemAdder(mem_space=self.memory_space, attn_coords=[0,0], attn="")
         self.working_memory.clear()
 
-        #indices = np.array(matching_mems_embeds)
-        #N = len(indices)
+    def get_curr_attn(self) -> DecayedAttn | None:
 
-        #self.working_memory[f"{indices[:N-3]}, {}"] = indices[:N-3]  
-        #self.working_memory[f"{indices[:N-3]}, {}"] = indices[1:N-2]  
-        #self.working_memory[f"{indices[:N-3]}, {}"] = indices[2:N-1]  
+        """Returns the current attention anchor and its decay rate.
 
-    def get_curr_attn(self) -> list[np.ndarray, float]:
+        The decay rate is higher (15.0) if working memory exceeds 4 items,
+        otherwise it defaults to 5.0.
+        """
 
-        if len(self.working_memory.items() > 4):
-            return [self.memory_space[0], 15.0]
+        if (len(self.memory_space) == 0):
+            return None
 
-        return [self.memory_space[0], 5.0]
+        self.decay.CurrAttnFocus = self.memory_space[0]
+
+        if len(self.working_memory.items()) > 4:
+            self.decay.DecayRate = 15.0
+            return self.decay
+            
+        return self.decay
 
 class Gate:
 
@@ -136,7 +160,7 @@ class Gate:
         self.attention = AttentionSpace()
         self.attention_list = []
         self.current_attention = {}
-        self.xy = coords(x=0, y=0)
+        self.xy = Coords(x=0, y=0)
 
      def attach(self, deep_memory: bool = False) -> dict[str, str]:
 
@@ -185,7 +209,7 @@ class Gate:
                 },
             }
 
-     def push_attention(self, attention: str, xy: coords) -> None:
+     def push_attention(self, attention: str, xy: Coords) -> None:
 
         '''
             Pushing to the attention space is what makes the LLM agent remember what to remember on,
@@ -193,11 +217,20 @@ class Gate:
         '''
 
         curr_anchor = self.attention.get_curr_attn()
+        decay = False
 
-        curr_attn_decay: float = self.attention_check(curr_anchor[0], self.time, curr_anchor[1])
+        if (curr_anchor.CurrAttnFocus[2] > 40):
+            decay = True
+
+        curr_attn_decay: float | None = self.attention_check(curr_anchor.CurrAttnFocus, self.time, curr_anchor.DecayRate) if decay else None
+
+        if (isinstance(curr_attn_decay, None)):
+            self.attention.add_memory(attention, xy)
+            return
+
         self.attention.decay_current(curr_attn_decay)
         self.attention.add_memory(attention, xy)
-    
+        return
 
      def attention_check(self, curr_attn_decay: float, last_timestamp: float, decay_rate: float) -> typing.Any | float:
             """
