@@ -22,7 +22,7 @@ class StoredWorkingMem():
     Pos: Coords
     Attn: WorkingMemAttn
 
-def AttentionMemAdder(mem_space: np.ndarray, attn_coords: Coords | list[float], attn: str) -> np.ndarray:
+def AttnMemAdder(mem_space: np.ndarray, attn_coords: Coords | list[float], attn: str) -> np.ndarray:
 
     x = attn_coords.x if isinstance(attn_coords, Coords) else attn_coords[0] if isinstance(attn_coords, list) else None
     y = attn_coords.y if isinstance(attn_coords, Coords) else attn_coords[1] if isinstance(attn_coords, list) else None
@@ -80,7 +80,7 @@ class AttentionSpace:
         if not (isinstance(xy, str)):
            return False
 
-        self.memory_space = AttentionMemAdder(self.memory_space, attn_coords, attention)
+        self.memory_space = AttnMemAdder(self.memory_space, attn_coords, attention)
 
         self.working_memory[f"{str(attn_coords.x)},{str(attn_coords.y)}"] = attention
 
@@ -103,7 +103,7 @@ class AttentionSpace:
         new_memory_space[matching_mems_embeds] = self.memory_space[matching_mems_embeds]
 
         self.memory_space = new_memory_space
-        self.memory_space = AttentionMemAdder(mem_space=self.memory_space, attn_coords=[0,0], attn="")
+        self.memory_space = AttnMemAdder(mem_space=self.memory_space, attn_coords=[0,0], attn="")
         self.working_memory.clear()
 
     def get_curr_attn(self) -> DecayedAttn | dict[str, WorkingMemAttn] | None:
@@ -136,42 +136,40 @@ class AttentionSpace:
 class Gate:
 
      attention: AttentionSpace
-     attention_list: list[float]
-
      attention_count: int
      current_attention: dict[str, any]
+     schema: dict[str, any]
 
-     schema = {
-        "type": "object",
-        "properties": {
-            "output": {
-                "type": "string",
-                "description": "LLM Output"
-            },
-            "attention": {
-                "type": "boolean",
-                "description": "True or False only. Do not capitalize as True/False if outputting raw JSON. Focus on this output or not = context"
-            }, 
-            "x": {
-                "type": "number",
-                "description": "context importance coordinate. Must be a plain decimal number between 0.00 and 1.00 (e.g., 0.55). Do not use scientific notation, NaN, or text. X coordinate -> memoryspace"
-            },
-            "y": {
-                "type": "number",
-                "description":  "context relevance coordinate. Must be a plain decimal number between 0.00 and 1.00 (e.g., 0.55). Do not use scientific notation, NaN, or text. Y coordinate -> memoryspace"
-            },
-        }
-     }
-
-     __slots__ = ['attention', 'attention_list', 'current_attention', 'xy', 'time']
+     __slots__ = ['attention', 'current_attention', 'time', 'xy', 'schema']
      
      def __init__(self):
         
         self.attention = AttentionSpace()
-        self.attention_list = []
         self.current_attention = {}
         self.time = 0.0
+        # might decouple from gate?
         self.xy = Coords(x=0, y=0)
+        self.schema = {
+            "type": "object",
+            "properties": {
+                "output": {
+                    "type": "string",
+                    "description": "LLM Output"
+                },
+                "attention": {
+                    "type": "boolean",
+                    "description": "True or False only. Do not capitalize as True/False if outputting raw JSON. Focus on this output or not = context"
+                }, 
+                "x": {
+                    "type": "number",
+                    "description": "context importance coordinate. Must be a plain decimal number between 0.00 and 1.00 (e.g., 0.55). Do not use scientific notation, NaN, or text. X coordinate -> memoryspace"
+                },
+                "y": {
+                    "type": "number",
+                    "description":  "context relevance coordinate. Must be a plain decimal number between 0.00 and 1.00 (e.g., 0.55). Do not use scientific notation, NaN, or text. Y coordinate -> memoryspace"
+                },
+            }
+        }
 
      def attach(self, deep_memory: bool = False) -> dict[str, WorkingMemAttn]:
 
