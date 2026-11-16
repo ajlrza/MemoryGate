@@ -47,6 +47,27 @@ def test_gate_properties(gate: Gate):
 
 def test_gate_schema(gate: Gate):
 
+    raw_schema = {"output": {
+                    "type": "string",
+                    "description": "LLM Output"
+                },
+                "attention": {
+                    "type": "bool",
+                    "description": "Attention focus on the output based on LLM thinking"
+                },
+                "x": {
+                    "type": "float",
+                    "description": "Context importance - X coordinate placement based on LLM thinking & returned working memory"
+                },
+                "y": {
+                    "type": "float",
+                    "description": "Context relevance - Y coordinate placement based on LLM thinking & returned working memory"
+                },
+            }
+
+    assert isinstance(gate.raw_schema(), dict[str, any]) == True
+    assert gate.raw_schema == raw_schema
+
     schema_obj = ["type", "properties"]
     schema_props = ["output", "attention", "x", "y"]
 
@@ -57,11 +78,13 @@ def test_gate_schema(gate: Gate):
     assert gate.schema["properties"]["x"] == "number"
     assert gate.schema["properties"]["y"] == "number"
 
-def test_attn_flow(coords: Coords, attnspace_obj: AttentionSpace):
+def test_attn_flow(gate: Gate, mock_llm_output: dict[str, any]):
 
-    assert isinstance(attnspace_obj.compute_attention(coords_dc(1,2)), str) ==  True
-    attnspace_obj.add_memory("Test", Coords)
-
+    assert isinstance(gate.attach(), dict) ==  True
+    gate.process(mock_llm_output)
+    assert len(gate.current_attention.items()) != 0
+    assert gate.attention_count != 0
+    
 def main():
 
     empty_mem = np.zeros((1000, 4), dt = dt)

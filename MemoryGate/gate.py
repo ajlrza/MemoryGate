@@ -146,6 +146,7 @@ class Gate:
         
         self.attention = AttentionSpace()
         self.current_attention = {}
+        self.attention_count = 0
         self.time = 0.0
         # might decouple from gate?
         self.xy = Coords(x=0, y=0)
@@ -247,6 +248,10 @@ class Gate:
 
         self.attention.decay_current(curr_attn_decay)
         self.attention.add_memory(attention, xy)
+
+        self.current_attention[xy] = attention
+        self.attention_count += 1
+
         return
 
      def attention_check(self, curr_attn_decay: float, last_timestamp: float, decay_rate: typing.Literal[5, 15]) -> typing.Any | float:
