@@ -22,18 +22,28 @@ class StoredWorkingMem():
     Pos: Coords
     Attn: WorkingMemAttn
 
-def AttnMemAdder(mem_space: np.ndarray, attn_coords: Coords | list[float], attn: str) -> np.ndarray:
+def attn_mem_adder(mem_dict: dict[str, any], mem_space: np.ndarray, attn_coords: Coords | list[float], attn: str) -> np.ndarray:
+
+    if (len(mem_dict.items()) > 1000):
+        return mem_space
 
     x = attn_coords.x if isinstance(attn_coords, Coords) else attn_coords[0] if isinstance(attn_coords, list) else None
     y = attn_coords.y if isinstance(attn_coords, Coords) else attn_coords[1] if isinstance(attn_coords, list) else None
 
+    if (x == None or y == None):
+        return mem_space
+
     x_row = int(x)
     y_col = int(y)
 
-    mem_space['context importance'][x_row, y_col] = x
-    mem_space['context relevance'][x_row, y_col] = y
-    mem_space['score'][x_row, y_col] = 100
-    mem_space['attention'][x_row, y_col] = attn
+    if (x > 1000 or y > 1000 & len(mem_dict.items()) < 1000):
+        last_mem_idx = int(list(mem_dict.keys())[-1][0])
+        x_row = last_mem_idx + 1
+
+    mem_space['context importance'][x_row] = x_row
+    mem_space['context relevance'][x_row] = y_col
+    mem_space['score'][x_row] = 100
+    mem_space['attention'][x_row] = attn
 
     return mem_space
 
@@ -42,6 +52,7 @@ dt = np.dtype([('context importance', 'i4'), ('context relevance', 'i4'), ('scor
 class AttentionSpace:
     working_memory: dict[str, WorkingMemAttn]
     memory_space: np.ndarray
+    decay: DecayedAttn
 
     __slots__ = ['working_memory', 'memory_space', 'decay']
 
@@ -55,24 +66,22 @@ class AttentionSpace:
         if (len(self.working_memory.items()) == 0):
             return "0,0"
 
-        curr_attn_anchor = self.memory_space[0]
-
         # We compute based on their X - context importance, and Y - context relevance, 
         # so we assume context importance has a relationship with context relevance
-        dot = np.dot([attention_coords.x, attention_coords.y], [curr_attn_anchor[0], curr_attn_anchor[1]])
+        dot = np.dot([attention_coords.x, attention_coords.y], [self.memory_space[0,0]['context importance'], self.memory_space[0,0]['context relevance']])
         magnitude_importance = math.sqrt((attention_coords.x ** 2) + (attention_coords.y ** 2))
-        magnitude_relevance = math.sqrt((curr_attn_anchor[0] ** 2) + (curr_attn_anchor[1] ** 2))
+        magnitude_relevance = math.sqrt((self.memory_space[0,0]['context importance'] ** 2) + (self.memory_space[0,0]['context relevance'] ** 2))
         similarity = dot / (magnitude_importance * magnitude_relevance)
 
-        distance = ((attention_coords.x - curr_attn_anchor[0])) + ((attention_coords.y - curr_attn_anchor[1]))
+        distance = ((attention_coords.x - self.memory_space[0][0]['context importance'])) + ((attention_coords.y - self.memory_space[0,0]['context relevance']))
         attention_equation = similarity * distance
 
         if (attention_equation == 0):
             return attention_coords
         elif (attention_equation > 1):
-            return f"{attention_coords.x - curr_attn_anchor[0]},{attention_coords.y - curr_attn_anchor[1]}"
+            return f"{attention_coords.x - self.memory_space[0,0]['context importance']},{attention_coords.y - self.memory_space[0,0]['context relevance']}"
         elif (attention_equation < 1):
-            return f"{attention_coords.x - curr_attn_anchor[0] - distance},{attention_coords.y - curr_attn_anchor[1] - distance}"
+            return f"{attention_coords.x - self.memory_space[0,0]['context importance'] - distance},{attention_coords.y - self.memory_space[0,0]['context relevance'] - distance}"
 
     def add_memory(self, attention: str, attn_coords: Coords) -> None | bool:
         xy: str = self.compute_attention(attn_coords)
@@ -80,7 +89,11 @@ class AttentionSpace:
         if not (isinstance(xy, str)):
            return False
 
-        self.memory_space = AttnMemAdder(self.memory_space, attn_coords, attention)
+        self.memory_space = attn_mem_adder(
+            mem_dict=self.working_memory, 
+            mem_space=self.memory_space, 
+            attn_coords=attn_coords, 
+            attn=attention)
 
         self.working_memory[f"{str(attn_coords.x)},{str(attn_coords.y)}"] = attention
 
@@ -94,8 +107,7 @@ class AttentionSpace:
         # check if any attention embeddings are at most 5 coordinates away, we could keep them.
         # 5 - not too relevant, still a little bit of context and relevance
 
-        match = (self.memory_space['context importance'][0,0] > self.memory_space['context importance']) & (self.memory_space['context relevance'][0, 1] > self.memory_space['context relevance'])
-        #matching_mems = self.memory_space[match]
+        match = (self.memory_space[0,0]['context importance'] > self.memory_space['context importance']) & (self.memory_space[0,0]['context relevance'] > self.memory_space['context relevance'])
 
         matching_mems_embeds = np.where(match)[0]
         new_memory_space = np.zeros((1000, 4), dtype=dt)
@@ -103,7 +115,7 @@ class AttentionSpace:
         new_memory_space[matching_mems_embeds] = self.memory_space[matching_mems_embeds]
 
         self.memory_space = new_memory_space
-        self.memory_space = AttnMemAdder(mem_space=self.memory_space, attn_coords=[0,0], attn="")
+        self.memory_space = attn_mem_adder(mem_dict=self.working_memory,mem_space=self.memory_space, attn_coords=[0,0], attn="")
         self.working_memory.clear()
 
     def get_curr_attn(self) -> DecayedAttn | dict[str, WorkingMemAttn] | None:
@@ -139,8 +151,10 @@ class Gate:
      attention_count: int
      current_attention: dict[str, any]
      schema: dict[str, any]
+     time: float
+     xy: Coords
 
-     __slots__ = ['attention', 'current_attention', 'time', 'xy', 'schema']
+     __slots__ = ['attention', 'attention_count', 'current_attention', 'schema', 'time', 'xy']
      
      def __init__(self):
         
@@ -163,11 +177,11 @@ class Gate:
                 }, 
                 "x": {
                     "type": "number",
-                    "description": "context importance coordinate. Must be a plain decimal number between 0.00 and 1.00 (e.g., 0.55). Do not use scientific notation, NaN, or text. X coordinate -> memoryspace"
+                    "description": "context importance coordinate. Must be a plain decimal number between 0.00 and 1.00 (e.g., 0.55) and within 0-50. Do not use scientific notation, NaN, or text. X coordinate -> memoryspace"
                 },
                 "y": {
                     "type": "number",
-                    "description":  "context relevance coordinate. Must be a plain decimal number between 0.00 and 1.00 (e.g., 0.55). Do not use scientific notation, NaN, or text. Y coordinate -> memoryspace"
+                    "description":  "context relevance coordinate. Must be a plain decimal number between 0.00 and 1.00 (e.g., 0.55) and within 0-50. Do not use scientific notation, NaN, or text. Y coordinate -> memoryspace"
                 },
             }
         }
@@ -193,6 +207,9 @@ class Gate:
             The LLM has a system prompt that must determine on its own whether
             to focus on its current response, by outputting a schematic response
         '''
+
+        if (list(agent_response.keys()) != list(self.schema.keys())):
+            return
 
         self.xy.x = agent_response["x"]
         self.xy.y = agent_response["y"]
@@ -237,10 +254,10 @@ class Gate:
 
         decay = False
 
-        if (curr_anchor.AttnFocus[2] > 40):
+        if (curr_anchor.AttnFocus['score'][0] > 40):
             decay = True
 
-        curr_attn_decay: float | None = self.attention_check(curr_anchor.AttnFocus[2], self.time, curr_anchor.DecayRate) if decay else None
+        curr_attn_decay: float | None = self.attention_check(curr_anchor.AttnFocus['score'][0], self.time, curr_anchor.DecayRate) if decay else None
 
         if (not isinstance(curr_attn_decay, float)):
             self.attention.add_memory(attention, xy)
@@ -249,7 +266,7 @@ class Gate:
         self.attention.decay_current(curr_attn_decay)
         self.attention.add_memory(attention, xy)
 
-        self.current_attention[xy] = attention
+        self.current_attention[str(xy.x) + "," +str(xy.y)]['attention'] = attention
         self.attention_count += 1
 
         return
