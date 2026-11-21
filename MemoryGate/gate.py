@@ -13,14 +13,22 @@ class DecayedAttn():
     DecayRate: typing.Literal[5,15]
 
 @dataclass(slots=True)
-class WorkingMemAttn():
+class SpaceWorkingMemAttn():
     Attn: str
     Score: float
 
 @dataclass(slots=True)
-class StoredWorkingMem():
+class SpaceStoredWorkingMem():
     Pos: Coords
-    Attn: WorkingMemAttn
+    Attn: SpaceWorkingMemAttn
+
+CONTENT_KEY_NAMES: set[str] = {
+    "content",  # OpenAI, Anthropic, Mistral, Groq, Together AI, Perplexity
+    "text",  # Google Gemini, Cohere, Anthropic (legacy v1), AWS Bedrock
+    "completion",  # Anthropic (legacy completion API), AI21
+    "generation",  # Cohere (legacy generation API)
+    "output",  # Replicate, Hugging Face TGI
+}
 
 def attn_mem_adder(mem_dict: dict[str, any], mem_space: np.ndarray, attn_coords: Coords | list[float], attn: str) -> np.ndarray:
 
@@ -50,14 +58,14 @@ def attn_mem_adder(mem_dict: dict[str, any], mem_space: np.ndarray, attn_coords:
 dt = np.dtype([('context importance', 'i4'), ('context relevance', 'i4'), ('score', 'f8'), ('attention', 'U10')])
 
 class AttentionSpace:
-    working_memory: dict[str, WorkingMemAttn]
+    working_memory: dict[str, SpaceWorkingMemAttn]
     memory_space: np.ndarray
     decay: DecayedAttn
 
     __slots__ = ['working_memory', 'memory_space', 'decay']
 
     def __init__(self):
-        self.working_memory: dict[str, WorkingMemAttn] = {}
+        self.working_memory: dict[str, SpaceWorkingMemAttn] = {}
         self.memory_space = np.zeros((1000, 4), dtype=dt)
         self.decay = DecayedAttn(AttnFocus=None, DecayRate=5)
 
@@ -118,7 +126,7 @@ class AttentionSpace:
         self.memory_space = attn_mem_adder(mem_dict=self.working_memory,mem_space=self.memory_space, attn_coords=[0,0], attn="")
         self.working_memory.clear()
 
-    def get_curr_attn(self) -> DecayedAttn | dict[str, WorkingMemAttn] | None:
+    def get_curr_attn(self) -> DecayedAttn | dict[str, SpaceWorkingMemAttn] | None:
 
         """Returns the current attention anchor and its decay rate.
 
@@ -137,7 +145,7 @@ class AttentionSpace:
             
         return self.decay
 
-    def get_mem_space_dict(self) -> dict[str, WorkingMemAttn]:
+    def get_mem_space_dict(self) -> dict[str, SpaceWorkingMemAttn]:
         
         return self.working_memory
 
@@ -186,13 +194,15 @@ class Gate:
             }
         }
 
-     def attach(self, deep_memory: bool = False) -> dict[str, WorkingMemAttn]:
+     def attach(self, deep_memory: bool = False) -> None | tuple[str, SpaceWorkingMemAttn] | dict[str, SpaceWorkingMemAttn]:
 
-        self.time = time.time()
-        curr_attn_anchor = self.attention.get_mem_space_dict()
+        self.time: float = time.time()
+        curr_attn_anchor: dict[str, SpaceWorkingMemAttn] = self.attention.get_mem_space_dict()
 
         if (len(curr_attn_anchor.items()) == 0):
-            return curr_attn_anchor
+
+            # If none, gate object should skip adding it to the API schema.
+            return None
 
         if (deep_memory):
             return curr_attn_anchor
@@ -200,24 +210,29 @@ class Gate:
         # In other methods, computing, I would put the one with most attention score on to the first one via sorting.
         # But before all that, I'm planning to, per attention computation, the score column for each row would experience
         # dilution, as they are kept stale or not read much / needed. That's why we had the < 40 thing.
+
+        # Return the first row in the 2D array via dictionary,
+        # first row is the attention anchor for the current session
         return list(curr_attn_anchor.items())[0]
 
-     def process(self, agent_response: dict[str, any]) -> None:
+     def process(self, agent_response: dict[str, any]) -> None | bool[False]:
         '''
             The LLM has a system prompt that must determine on its own whether
             to focus on its current response, by outputting a schematic response
         '''
 
-        if (list(agent_response.keys()) != list(self.schema.keys())):
-            return
+        content_key: set[str] = set(agent_response.keys()).intersection(CONTENT_KEY_NAMES)
 
-        self.xy.x = agent_response["x"]
-        self.xy.y = agent_response["y"]
+        if (len(content_key) == 0):
+            return False
+
+        self.xy.x = agent_response[content_key[0]]["x"]
+        self.xy.y = agent_response[content_key[0]]["y"]
 
         if (agent_response["attention"] == False):
             return
         
-        self.push_attention(agent_response["output"], self.xy)
+        self.push_attention(agent_response[content_key[0]], self.xy)
 
      def raw_schema(self) -> dict[str, dict[str, str]]: 
 
@@ -266,7 +281,7 @@ class Gate:
         self.attention.decay_current(curr_attn_decay)
         self.attention.add_memory(attention, xy)
 
-        self.current_attention[str(xy.x) + "," +str(xy.y)]['attention'] = attention
+        self.current_attention[f"{str(xy.x)},{str(xy.y)}"]['attention'] = attention
         self.attention_count += 1
 
         return
