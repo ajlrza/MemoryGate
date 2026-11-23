@@ -13,6 +13,13 @@ class DecayedAttn():
     DecayRate: typing.Literal[5,15]
 
 @dataclass(slots=True)
+class DictWorkingMemAttn():
+    ContxtImportance: int
+    ContxtRelevance: int
+    Attn: str
+    Score: float
+
+@dataclass(slots=True)
 class SpaceWorkingMemAttn():
     Attn: str
     Score: float
@@ -69,7 +76,7 @@ class AttentionSpace:
         self.memory_space = np.zeros((1000, 4), dtype=dt)
         self.decay = DecayedAttn(AttnFocus=None, DecayRate=5)
 
-    def compute_attention(self, attention_coords: Coords) -> str:
+    def compute_attention(self, attention_coords: Coords) -> Coords:
 
         if (len(self.working_memory.items()) == 0):
             return "0,0"
@@ -84,15 +91,23 @@ class AttentionSpace:
         distance = ((attention_coords.x - self.memory_space[0][0]['context importance'])) + ((attention_coords.y - self.memory_space[0,0]['context relevance']))
         attention_equation = similarity * distance
 
+        Coords(x=0,y=0)
+
         if (attention_equation == 0):
             return attention_coords
         elif (attention_equation > 1):
-            return f"{attention_coords.x - self.memory_space[0,0]['context importance']},{attention_coords.y - self.memory_space[0,0]['context relevance']}"
+            return Coords(
+                x=attention_coords.x - self.memory_space[0,0]['context importance'],
+                y=attention_coords.y - self.memory_space[0,0]['context relevance']
+                )
         elif (attention_equation < 1):
-            return f"{attention_coords.x - self.memory_space[0,0]['context importance'] - distance},{attention_coords.y - self.memory_space[0,0]['context relevance'] - distance}"
+            return Coords(
+                x=attention_coords.x - self.memory_space[0,0]['context importance'] - distance,
+                y=attention_coords.y - self.memory_space[0,0]['context relevance'] - distance
+            )
 
     def add_memory(self, attention: str, attn_coords: Coords) -> None | bool:
-        xy: str = self.compute_attention(attn_coords)
+        xy: Coords = self.compute_attention(attn_coords)
 
         if not (isinstance(xy, str)):
            return False
@@ -100,10 +115,10 @@ class AttentionSpace:
         self.memory_space = attn_mem_adder(
             mem_dict=self.working_memory, 
             mem_space=self.memory_space, 
-            attn_coords=attn_coords, 
+            attn_coords=xy, 
             attn=attention)
 
-        self.working_memory[f"{str(attn_coords.x)},{str(attn_coords.y)}"] = attention
+        self.working_memory[f"{str(xy.x)},{str(xy.y)}"].Attn = attention
 
     def decay_current(self, decayed_attn_score: float) -> None:
 
@@ -126,7 +141,7 @@ class AttentionSpace:
         self.memory_space = attn_mem_adder(mem_dict=self.working_memory,mem_space=self.memory_space, attn_coords=[0,0], attn="")
         self.working_memory.clear()
 
-    def get_curr_attn(self) -> DecayedAttn | dict[str, SpaceWorkingMemAttn] | None:
+    def get_curr_attn(self) -> DecayedAttn | None:
 
         """Returns the current attention anchor and its decay rate.
 
@@ -157,7 +172,7 @@ class Gate:
 
      attention: AttentionSpace
      attention_count: int
-     current_attention: dict[str, any]
+     current_attention: dict[str, DictWorkingMemAttn]
      schema: dict[str, any]
      time: float
      xy: Coords
@@ -261,7 +276,7 @@ class Gate:
             and rely on for context during roleplays.
         '''
 
-        curr_anchor = self.attention.get_curr_attn()
+        curr_anchor: DecayedAttn | None = self.attention.get_curr_attn()
 
         if (curr_anchor == None):
             self.attention.add_memory(attention, xy)
@@ -281,7 +296,9 @@ class Gate:
         self.attention.decay_current(curr_attn_decay)
         self.attention.add_memory(attention, xy)
 
-        self.current_attention[f"{str(xy.x)},{str(xy.y)}"]['attention'] = attention
+        self.current_attention[f"{str(xy.x)},{str(xy.y)}"].ContxtImportance = xy.x
+        self.current_attention[f"{str(xy.x)},{str(xy.y)}"].ContxtRelevance = xy.y
+        self.current_attention[f"{str(xy.x)},{str(xy.y)}"].Attn = attention
         self.attention_count += 1
 
         return
