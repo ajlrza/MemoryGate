@@ -185,7 +185,6 @@ class Gate:
         self.current_attention = {}
         self.attention_count = 0
         self.time = 0.0
-        # might decouple from gate?
         self.xy = Coords(x=0, y=0)
         self.schema = {
             "type": "object",

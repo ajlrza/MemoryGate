@@ -17,12 +17,13 @@ maintainers = [
 ]
 description = "A lightweight memory layer for roleplay chat agents for realism."
 readme = "README.md"
-license = {text = "MIT"}
+license = { text = "MIT" }
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
-    "Intended Audience :: Commercial/Personal",
+    "Intended Audience :: Developers",
+    "Intended Audience :: End Users/Desktop",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Text Processing :: Linguistic",
     "Topic :: Communications :: Chat",
