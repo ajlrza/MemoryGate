@@ -191,7 +191,7 @@ class Gate:
             "properties": {
                 "output": {
                     "type": "string",
-                    "description": "LLM Output"
+                    "description": "LLM Roleplay Response"
                 },
                 "attention": {
                     "type": "boolean",
@@ -205,7 +205,9 @@ class Gate:
                     "type": "number",
                     "description":  "context relevance coordinate. Must be a plain decimal number between 0.00 and 1.00 (e.g., 0.55) and within 0-50. Do not use scientific notation, NaN, or text. Y coordinate -> memoryspace"
                 },
-            }
+            },
+            "required": ["output", "attention", "x", "y"],
+            "additionalProperties": False,
         }
 
      def attach(self, deep_memory: bool = False) -> None | tuple[str, SpaceWorkingMemAttn] | dict[str, SpaceWorkingMemAttn]:
@@ -247,26 +249,6 @@ class Gate:
             return
         
         self.push_attention(agent_response[content_key[0]], self.xy)
-
-     def raw_schema(self) -> dict[str, dict[str, str]]: 
-
-        return {"output": {
-                    "type": "string",
-                    "description": "LLM Output"
-                },
-                "attention": {
-                    "type": "bool",
-                    "description": "Attention focus on the output based on LLM thinking"
-                },
-                "x": {
-                    "type": "float",
-                    "description": "Context importance - X coordinate placement based on LLM thinking & returned working memory"
-                },
-                "y": {
-                    "type": "float",
-                    "description": "Context relevance - Y coordinate placement based on LLM thinking & returned working memory"
-                },
-            }
 
      def push_attention(self, attention: str, xy: Coords) -> None:
 
