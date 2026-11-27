@@ -1,7 +1,7 @@
 import pytest as py
 import time, typing, math
 import numpy as np
-from MemoryGate.gate import Coords, DecayedAttn, WorkingMemAttn, StoredWorkingMem, AttentionSpace, Gate, AttnMemAdder, dt
+from MemoryGate.memorygate import Coords, DecayedAttn, WorkingMemAttn, StoredWorkingMem, AttentionSpace, Gate, AttnMemAdder, dt
 
 def coords_dc(x: int, y: int) -> Coords:
     dc = Coords(x=x, y=y)
