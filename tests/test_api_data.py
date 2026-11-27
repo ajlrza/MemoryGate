@@ -19,7 +19,6 @@ def stored_dc(pos: Coords, attn: str) -> StoredWorkingMem:
     dc = StoredWorkingMem(Pos=pos, Attn=y)
     return dc
 
-
 def test_coords_format_add_list(empty_mem: np.ndarray) -> bool:
     result = AttnMemAdder(empty_mem, [1, 2], "Test")
     assert result['context importance'] == 1

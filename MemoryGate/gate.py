@@ -296,6 +296,15 @@ class Gate:
         self.attention.decay_current(curr_attn_decay)
         self.attention.add_memory(attention, xy)
 
+        if (f"{str(xy.x)},{str(xy.y)}" not in self.current_attention.keys()):
+
+            self.current_attention[f"{str(xy.x)},{str(xy.y)}"] = DictWorkingMemAttn(
+                ContxtImportance=0,
+                ContxtRelevance=0,
+                Attn="",
+                Score=0.0
+            )
+
         self.current_attention[f"{str(xy.x)},{str(xy.y)}"].ContxtImportance = xy.x
         self.current_attention[f"{str(xy.x)},{str(xy.y)}"].ContxtRelevance = xy.y
         self.current_attention[f"{str(xy.x)},{str(xy.y)}"].Attn = attention
