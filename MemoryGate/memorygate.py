@@ -170,16 +170,16 @@ class AttentionSpace:
 
 class Gate:
 
-     attention: AttentionSpace
-     attention_count: int
-     current_attention: dict[str, DictWorkingMemAttn]
-     schema: dict[str, any]
-     time: float
-     xy: Coords
+    attention: AttentionSpace
+    attention_count: int
+    current_attention: dict[str, DictWorkingMemAttn]
+    schema: dict[str, any]
+    time: float
+    xy: Coords
 
-     __slots__ = ['attention', 'attention_count', 'current_attention', 'schema', 'time', 'xy']
+    __slots__ = ['attention', 'attention_count', 'current_attention', 'schema', 'time', 'xy']
      
-     def __init__(self):
+    def __init__(self):
         
         self.attention = AttentionSpace()
         self.current_attention = {}
@@ -210,7 +210,7 @@ class Gate:
             "additionalProperties": False,
         }
 
-     def attach(self, deep_memory: bool = False) -> None | tuple[str, SpaceWorkingMemAttn] | dict[str, SpaceWorkingMemAttn]:
+    def attach(self, deep_memory: bool = False) -> None | tuple[str, SpaceWorkingMemAttn] | dict[str, SpaceWorkingMemAttn]:
 
         self.time: float = time.time()
         curr_attn_anchor: dict[str, SpaceWorkingMemAttn] = self.attention.get_mem_space_dict()
@@ -231,7 +231,7 @@ class Gate:
         # first row is the attention anchor for the current session
         return list(curr_attn_anchor.items())[0]
 
-     def process(self, agent_response: dict[str, any]) -> None | bool[False]:
+    def process(self, agent_response: dict[str, any]) -> None | bool:
         '''
             The LLM has a system prompt that must determine on its own whether
             to focus on its current response, by outputting a schematic response
@@ -250,7 +250,7 @@ class Gate:
         
         self.push_attention(agent_response[content_key[0]], self.xy)
 
-     def push_attention(self, attention: str, xy: Coords) -> None:
+    def push_attention(self, attention: str, xy: Coords) -> None:
 
         '''
             Pushing to the attention space is what makes the LLM agent remember what to remember on,
@@ -293,7 +293,7 @@ class Gate:
 
         return
 
-     def attention_check(self, curr_attn_decay: float, last_timestamp: float, decay_rate: typing.Literal[5, 15]) -> typing.Any | float:
+    def attention_check(self, curr_attn_decay: float, last_timestamp: float, decay_rate: typing.Literal[5, 15]) -> typing.Any | float:
             """
             Applies exponential decay to the working memory based on elapsed time.
             """
