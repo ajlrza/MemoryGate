@@ -29,14 +29,6 @@ class SpaceStoredWorkingMem():
     Pos: Coords
     Attn: SpaceWorkingMemAttn
 
-CONTENT_KEY_NAMES: set[str] = {
-    "content",  # OpenAI, Anthropic, Mistral, Groq, Together AI, Perplexity
-    "text",  # Google Gemini, Cohere, Anthropic (legacy v1), AWS Bedrock
-    "completion",  # Anthropic (legacy completion API), AI21
-    "generation",  # Cohere (legacy generation API)
-    "output",  # Replicate, Hugging Face TGI
-}
-
 def attn_mem_adder(mem_dict: dict[str, any], mem_space: np.ndarray, attn_coords: Coords | list[float], attn: str) -> np.ndarray:
 
     if (len(mem_dict.items()) > 1000):
@@ -236,22 +228,7 @@ class Gate:
             to focus on its current response, by outputting a schematic response
         '''
 
-        content_key: set[str] | str = set(agent_response.keys()).intersection(CONTENT_KEY_NAMES)
-
-        if len(content_key) == 0:
-            return False
-
-        if len(content_key) > 1:
-            for key in content_key:
-                if isinstance(agent_response[key], dict) and len(agent_response[key].keys()) == 4:
-                    content_key: set[str] | str = (key) 
-            if not isinstance(content_key, str):
-                return False
-
-        # Assume the intersected key is only 1 on the set, if not fallback to the key from assumed loop
-        # We have earlier guardrail, which is detecting zero keys in the set, so no need here
-
-        updated_attn: dict[str, any] = orjson.loads(agent_response[list(content_key)[0] if isinstance(content_key, set) else content_key])
+        updated_attn: dict[str, any] = orjson.loads(agent_response.choices[0].message.content)
         
         self.xy.x = updated_attn["x"]
         self.xy.y = updated_attn["y"]
