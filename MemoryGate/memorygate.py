@@ -216,7 +216,6 @@ class Gate:
         curr_attn_anchor: dict[str, SpaceWorkingMemAttn] = self.attention.get_mem_space_dict()
 
         if (len(curr_attn_anchor.items()) == 0):
-
             # If none, gate object should skip adding it to the API schema.
             return None
 
@@ -242,13 +241,13 @@ class Gate:
         if (len(content_key) == 0):
             return False
 
-        self.xy.x = agent_response[content_key[0]]["x"]
-        self.xy.y = agent_response[content_key[0]]["y"]
+        self.xy.x = agent_response[list(content_key)[0]]["x"]
+        self.xy.y = agent_response[list(content_key)[0]]["y"]
 
         if (agent_response["attention"] == False):
             return
         
-        self.push_attention(agent_response[content_key[0]], self.xy)
+        self.push_attention(agent_response[list(content_key)[0]], self.xy)
 
     def push_attention(self, attention: str, xy: Coords) -> None:
 
