@@ -1,4 +1,4 @@
-import time, typing, math
+import time, typing, math, orjson
 import numpy as np
 from dataclasses import dataclass
 
@@ -250,13 +250,16 @@ class Gate:
 
         # Assume the intersected key is only 1 on the set, if not fallback to the key from assumed loop
         # We have earlier guardrail, which is detecting zero keys in the set, so no need here
-        self.xy.x = agent_response[list(content_key)[0] if isinstance(content_key, set) else content_key]["x"]
-        self.xy.y = agent_response[list(content_key)[0] if isinstance(content_key, set) else content_key]["y"]
 
-        if (agent_response["attention"] == False):
+        updated_attn: dict[str, any] = orjson.loads(agent_response[list(content_key)[0] if isinstance(content_key, set) else content_key])
+        
+        self.xy.x = updated_attn["x"]
+        self.xy.y = updated_attn["y"]
+
+        if (updated_attn["attention"] == False):
             return
         
-        self.push_attention(agent_response[list(content_key)[0]], self.xy)
+        self.push_attention(updated_attn, self.xy)
 
     def push_attention(self, attention: str, xy: Coords) -> None:
 
