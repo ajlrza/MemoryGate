@@ -236,13 +236,22 @@ class Gate:
             to focus on its current response, by outputting a schematic response
         '''
 
-        content_key: set[str] = set(agent_response.keys()).intersection(CONTENT_KEY_NAMES)
+        content_key: set[str] | str = set(agent_response.keys()).intersection(CONTENT_KEY_NAMES)
 
-        if (len(content_key) == 0):
+        if len(content_key) == 0:
             return False
 
-        self.xy.x = agent_response[list(content_key)[0]]["x"]
-        self.xy.y = agent_response[list(content_key)[0]]["y"]
+        if len(content_key) > 1:
+            for key in content_key:
+                if isinstance(agent_response[key], dict) and len(agent_response[key].keys()) == 4:
+                    content_key: set[str] | str = (key) 
+            if not isinstance(content_key, str):
+                return False
+
+        # Assume the intersected key is only 1 on the set, if not fallback to the key from assumed loop
+        # We have earlier guardrail, which is detecting zero keys in the set, so no need here
+        self.xy.x = agent_response[list(content_key)[0] if isinstance(content_key, set) else content_key]["x"]
+        self.xy.y = agent_response[list(content_key)[0] if isinstance(content_key, set) else content_key]["y"]
 
         if (agent_response["attention"] == False):
             return
